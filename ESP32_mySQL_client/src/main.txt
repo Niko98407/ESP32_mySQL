@@ -4,7 +4,8 @@
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <MySQL_Connection.h>
+#include <MySQL_Cursor.h>
 
 //define your default values here, if there are different values in config.json, they are overwritten.
 char mysql_server_ip[40] = "192.168.0.30";
@@ -24,47 +25,21 @@ void saveConfigCallback () {
   shouldSaveConfig = true;
 }
 
-WiFiClient espClient;
-PubSubClient client(espClient);
-long lastMsg = 0;
-char msg[50];
-int value;
+float num = 0;
+WiFiClient client;
+MySQL_Connection conn((Client*)&client);
+MySQL_Cursor* cursor;
+IPAddress serverAddr;
+
+
+
 
 const char* SSID = "cablelink_0290985";
 const char* PASS = "56pF5QwjV;6Ak7De";
-
-void callback(char* topic, byte* message, unsigned int length) {
-  Serial.print("Message arrived on topic: ");
-  Serial.print(topic);
-  Serial.print(". Message: ");
-  String messageTemp;
-  
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)message[i]);
-    messageTemp += (char)message[i];
-  }
-  Serial.println();
-
-  // Feel free to add more if statements to control more GPIOs with MQTT
-
-  // If a message is received on the topic esp32/output, you check if the message is either "on" or "off". 
-  // Changes the output state according to the message
-  if (String(topic) == "esp32/output") {
-    Serial.print("Changing output to ");
-    if(messageTemp == "on"){
-      Serial.println("on");
-    }
-    else if(messageTemp == "off"){
-      Serial.println("off");
-    }
-  }
-}
-
-
-
 void setup() {
-  
+  client.
 
+  /*
     WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
     // it is a good practice to make sure your code sets wifi mode how you want it.
 
@@ -239,48 +214,59 @@ void setup() {
   Serial.println("local ip");
   Serial.println(WiFi.localIP());
 
-  client.setServer(mysql_server_ip, 1883);
-  client.setCallback(callback);
- 
+  serverAddr.fromString(mysql_server_ip); 
+ */
 }
 
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    if (client.connect("ESP8266Client")) {
-      Serial.println("connected");
-      // Subscribe
-      client.subscribe("esp32/output");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
-}
 
+IPAddress server_addr(192, 168, 0, 30);
+char user[] = "myuser"; 
+char password[] = "1";
 void loop() {
-  if (!client.connected()) {
-    reconnect();
+/*
+  WiFiManager wm;
+  bool res;
+  res = wm.autoConnect();
+  if(res)
+  {
+    WiFi.begin();
+    char username[] = "myuser";
+    char password[] = "1";
+    char database[] = "DefaultDB";
+    Serial.println("Beign Loop");
+    conn.connect(serverAddr, 3306, username, password, database);
+    Serial.println("connected");
+    delay (1000);
+    cursor = new MySQL_Cursor(&conn);
+    char statementChar[256];
+    String statementStr = "INSERT INTO tbl_temps (logDateTime, logIdentifier, logTopic, temp1,temp2,temp3) VALUES (CURRENT_TIME(), 'ESP_TEST', 'home/outdoor/terrace/temp', " + String(num)+ ", 21.33, -2.81);";
+    statementStr.toCharArray (statementChar, statementStr.length());
+    cursor->execute(statementChar);
+    conn.close();
+    WiFi.disconnect();
+    delay(5000);
+    num = num + 0.5;
+    if(num > 10) num = 0;
+  }else{
+    Serial.print("Autoconnect not possible");
   }
-  client.loop();
 
-  long now = millis();
-  if (now - lastMsg > 5000) {
-    lastMsg = now;
-
-    // Uncomment the next line to set temperature in Fahrenheit 
-    // (and comment the previous temperature line)
-    //temperature = 1.8 * bme.readTemperature() + 32; // Temperature in Fahrenheit
-    
-    // Convert the value to a char array
-    
-    Serial.println("Write");
-    
-    client.publish("testtopic/temperature", "Hello from esp32");
-  }
+  
+  // put your main code here, to run repeatedly:
+  Serial.println("END Loop");
+  */
+  WiFi.begin(SSID, PASS);
+  delay (1000);
+  conn.connect(server_addr, 3306, user, password);
+  delay (1000);
+  cursor = new MySQL_Cursor(&conn);
+  char statementChar[256];
+  String statementStr = "INSERT INTO tbl_temps (logDateTime, logIdentifier, logTopic, temp1,temp2,temp3) VALUES (CURRENT_TIME(), 'ESP_TEST', 'home/outdoor/terrace/temp', " + String(num)+ ", 21.33, -2.81);";
+  statementStr.toCharArray (statementChar, statementStr.length());
+  cursor->execute(statementChar);
+  conn.close();
+  WiFi.disconnect();
+  delay(5000);
+  num = num + 0.5;
+    if(num > 10) num = 0;
 }
