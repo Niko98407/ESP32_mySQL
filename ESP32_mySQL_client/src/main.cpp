@@ -5,7 +5,8 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
-
+#include <OneWire.h>
+#include <DallasTemperature.h>
 //define your default values here, if there are different values in config.json, they are overwritten.
 char mysql_server_ip[40] = "192.168.0.30";
 char mysql_server_port[6] = "3306";
@@ -32,6 +33,10 @@ int value;
 
 const char* SSID = "cablelink_0290985";
 const char* PASS = "56pF5QwjV;6Ak7De";
+
+#define ONE_WIRE_BUS 17
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
 
 void callback(char* topic, byte* message, unsigned int length) {
   Serial.print("Message arrived on topic: ");
@@ -241,7 +246,7 @@ void setup() {
 
   client.setServer(mysql_server_ip, 1883);
   client.setCallback(callback);
- 
+  sensors.begin();
 }
 
 void reconnect() {
@@ -263,14 +268,18 @@ void reconnect() {
   }
 }
 
+ulong id = 0;
+float temp1;
+float temp2;
+float temp3;
 void loop() {
-  if (!client.connected()) {
+  /*if (!client.connected()) {
     reconnect();
   }
   client.loop();
-
+*/
   long now = millis();
-  if (now - lastMsg > 5000) {
+  if (now - lastMsg > 1000) {
     lastMsg = now;
 
     // Uncomment the next line to set temperature in Fahrenheit 
@@ -278,9 +287,23 @@ void loop() {
     //temperature = 1.8 * bme.readTemperature() + 32; // Temperature in Fahrenheit
     
     // Convert the value to a char array
-    
+    sensors.requestTemperatures();
+    temp1 = sensors.getTempCByIndex(0);
+    Serial.print("Temperature for the device 1 (index 0) is: ");
+    Serial.println(temp1);
+    temp2 = 22.4;
+    temp3 = -12.22;
     Serial.println("Write");
+    DynamicJsonDocument json(1024);
+    json["LogId"] = id;
+    json["LogDescription"] = mysql_server_identifier;
+    json["SensorData"]["Sensor1"] = temp1;
+    json["SensorData"]["Sensor2"] = temp2;
+    json["SensorData"]["Sensor3"] = temp3;
+    char str[1024];
+    serializeJsonPretty(json, str);
+    client.publish("Test/temperature", str);
+    id++;
     
-    client.publish("testtopic/temperature", "Hello from esp32");
   }
 }
