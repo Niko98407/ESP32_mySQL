@@ -7,6 +7,10 @@
 #include <PubSubClient.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7735.h>
+#include <SPI.h>
+
 //define your default values here, if there are different values in config.json, they are overwritten.
 char mysql_server_ip[40] = "192.168.0.30";
 char mysql_server_port[6] = "3306";
@@ -38,6 +42,36 @@ const char* PASS = "56pF5QwjV;6Ak7De";
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
+#define SerialDebugging true
+#define TFT_CS 14       // Chip Select
+#define TFT_RST 26      // Reset
+#define TFT_DC 27      // data/ctrl
+#define TFT_MOSI 25     // Data out
+#define TFT_SCLK 33     // Clock out
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
+
+const uint16_t  Display_Color_Black        = 0x0000;
+const uint16_t  Display_Color_Blue         = 0x001F;
+const uint16_t  Display_Color_Red          = 0xF800;
+const uint16_t  Display_Color_Green        = 0x07E0;
+const uint16_t  Display_Color_Cyan         = 0x07FF;
+const uint16_t  Display_Color_Magenta      = 0xF81F;
+const uint16_t  Display_Color_Yellow       = 0xFFE0;
+const uint16_t  Display_Color_White        = 0xFFFF;
+
+uint16_t        Display_Text_Color         = Display_Color_Black;
+uint16_t        Display_Backround_Color    = Display_Color_White;
+const size_t    MaxString               = 16;
+
+
+
+
+ulong id = 0;
+float temp1;
+float temp2;
+float temp3;
+
+
 void callback(char* topic, byte* message, unsigned int length) {
   Serial.print("Message arrived on topic: ");
   Serial.print(topic);
@@ -64,18 +98,82 @@ void callback(char* topic, byte* message, unsigned int length) {
     }
   }
 }
+bool            isDisplayVisible        = false;
+char oldTimeString[MaxString]           = { 0 };
+void displayUpTime() {
 
+    // calculate seconds, truncated to the nearest whole second
+    unsigned long upSeconds = millis() / 1000;
 
+    // calculate days, truncated to nearest whole day
+    unsigned long days = upSeconds / 86400;
 
+    // the remaining hhmmss are
+    upSeconds = upSeconds % 86400;
+
+    // calculate hours, truncated to the nearest whole hour
+    unsigned long hours = upSeconds / 3600;
+
+    // the remaining mmss are
+    upSeconds = upSeconds % 3600;
+
+    // calculate minutes, truncated to the nearest whole minute
+    unsigned long minutes = upSeconds / 60;
+
+    // the remaining ss are
+    upSeconds = upSeconds % 60;
+
+    // allocate a buffer
+    char newTimeString[MaxString] = { 0 };
+
+    // construct the string representation
+    sprintf(
+        newTimeString,
+        "%lu %02lu:%02lu:%02lu",
+        days, hours, minutes, upSeconds
+    );
+    // has the time string changed since the last tft update?
+    if (strcmp(newTimeString,oldTimeString) != 0) {
+
+        // yes! home the cursor
+        tft.setCursor(0,10);
+
+        // change the text color to the background color
+        tft.setTextColor(Display_Backround_Color);
+
+        // redraw the old value to erase
+        tft.print(oldTimeString);
+
+        // home the cursor
+        tft.setCursor(0,10);
+        
+        // change the text color to foreground color
+        tft.setTextColor(Display_Text_Color);
+    
+        // draw the new time value
+        tft.print(newTimeString);
+    
+        // and remember the new value
+        strcpy(oldTimeString,newTimeString);
+    }
+}
 void setup() {
-  
-
+    Serial.begin(115200);
+    Serial.println();
+    delay(100);
+    tft.initR(INITR_BLACKTAB); // Init ST7735R chip, green tab
+    tft.setFont();
+    tft.fillScreen(Display_Backround_Color);
+    tft.setTextColor(Display_Text_Color);
+    tft.setTextSize(1);
+    isDisplayVisible = true;
+    tft.enableDisplay(isDisplayVisible);
+    tft.print("Booting...");
     WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
     // it is a good practice to make sure your code sets wifi mode how you want it.
 
     // put your setup code here, to run once:
-    Serial.begin(115200);
-    Serial.println();
+    
 
     //clean FS, for testing
     //SPIFFS.format();
@@ -268,16 +366,13 @@ void reconnect() {
   }
 }
 
-ulong id = 0;
-float temp1;
-float temp2;
-float temp3;
+
 void loop() {
   /*if (!client.connected()) {
     reconnect();
   }
   client.loop();
-*/
+  */
   long now = millis();
   if (now - lastMsg > 1000) {
     lastMsg = now;
@@ -304,6 +399,6 @@ void loop() {
     serializeJsonPretty(json, str);
     client.publish("Test/temperature", str);
     id++;
-    
+    displayUpTime();
   }
 }
