@@ -61,8 +61,8 @@ const uint16_t  Display_Color_White        = 0xFFFF;
 
 uint16_t        Display_Text_Color         = Display_Color_Black;
 uint16_t        Display_Backround_Color    = Display_Color_White;
-const size_t    MaxString               = 16;
-
+const size_t    MaxString               = 21;
+const size_t    MaxLines                = 10;
 
 
 
@@ -99,62 +99,102 @@ void callback(char* topic, byte* message, unsigned int length) {
   }
 }
 bool            isDisplayVisible        = false;
-char oldTimeString[MaxString]           = { 0 };
-void displayUpTime() {
+char oldTimeString[MaxLines][MaxString]           = { 0 };
+void displayUpTime(float temp) {
 
-    // calculate seconds, truncated to the nearest whole second
-    unsigned long upSeconds = millis() / 1000;
-
-    // calculate days, truncated to nearest whole day
-    unsigned long days = upSeconds / 86400;
-
-    // the remaining hhmmss are
-    upSeconds = upSeconds % 86400;
-
-    // calculate hours, truncated to the nearest whole hour
-    unsigned long hours = upSeconds / 3600;
-
-    // the remaining mmss are
-    upSeconds = upSeconds % 3600;
-
-    // calculate minutes, truncated to the nearest whole minute
-    unsigned long minutes = upSeconds / 60;
-
-    // the remaining ss are
-    upSeconds = upSeconds % 60;
-
+    
     // allocate a buffer
-    char newTimeString[MaxString] = { 0 };
-
-    // construct the string representation
+    char newTimeString[MaxLines][MaxString] = { 0 };
+    char tempReading[6] = {0};
+    dtostrf(temp, 4, 2, tempReading);
     sprintf(
-        newTimeString,
-        "%lu %02lu:%02lu:%02lu",
-        days, hours, minutes, upSeconds
+        newTimeString[4],
+        "%s",
+        tempReading
     );
-    // has the time string changed since the last tft update?
-    if (strcmp(newTimeString,oldTimeString) != 0) {
+    sprintf(
+        newTimeString[8],
+        "0123456789-0123456789"
+    );
+    sprintf(
+        newTimeString[7],
+        "0123456789-0123456789"
+    );
+    
+    for(int i = 0; i < MaxLines; i++){
+      if (strcmp(newTimeString[i],oldTimeString[i]) != 0) {
 
         // yes! home the cursor
-        tft.setCursor(0,10);
+        tft.setCursor(0,8*i);
 
         // change the text color to the background color
         tft.setTextColor(Display_Backround_Color);
 
         // redraw the old value to erase
-        tft.print(oldTimeString);
+        tft.print(oldTimeString[i]);
 
         // home the cursor
-        tft.setCursor(0,10);
+        tft.setCursor(0,8*i);
         
         // change the text color to foreground color
         tft.setTextColor(Display_Text_Color);
     
         // draw the new time value
-        tft.print(newTimeString);
+        tft.print(newTimeString[i]);
     
         // and remember the new value
-        strcpy(oldTimeString,newTimeString);
+        strcpy(oldTimeString[i],newTimeString[i]);
+      }
+    }
+
+}
+uint cursor = 0;
+char oldStrings[MaxLines][MaxString] = { 0 };
+char newStrings[MaxLines][MaxString] = { 0 };
+void writeDebugMsg(char msg[]){
+
+  
+  
+  if(cursor >= MaxLines){//Shift up
+  for(int i = 1; i < MaxLines; i++){
+    strcpy(newStrings[i-1],newStrings[i]);
+  }
+    sprintf(
+        newStrings[MaxLines-1],
+        "%s",
+        msg);
+  }else{
+    sprintf(
+        newStrings[cursor],
+        "%s",
+        msg);
+        cursor++;
+  }
+
+  for(int i = 0; i < MaxLines; i++){
+      if (strcmp(newStrings[i],oldStrings[i]) != 0) {
+
+        // yes! home the cursor
+        tft.setCursor(0,8*i);
+
+        // change the text color to the background color
+        tft.setTextColor(Display_Backround_Color);
+
+        // redraw the old value to erase
+        tft.print(oldStrings[i]);
+
+        // home the cursor
+        tft.setCursor(0,8*i);
+        
+        // change the text color to foreground color
+        tft.setTextColor(Display_Text_Color);
+    
+        // draw the new time value
+        tft.print(newStrings[i]);
+    
+        // and remember the new value
+        strcpy(oldStrings[i],newStrings[i]);
+      }
     }
 }
 void setup() {
@@ -162,13 +202,14 @@ void setup() {
     Serial.println();
     delay(100);
     tft.initR(INITR_BLACKTAB); // Init ST7735R chip, green tab
+    tft.setRotation(1);
     tft.setFont();
     tft.fillScreen(Display_Backround_Color);
     tft.setTextColor(Display_Text_Color);
     tft.setTextSize(1);
     isDisplayVisible = true;
     tft.enableDisplay(isDisplayVisible);
-    tft.print("Booting...");
+   //tft.print("Booting...");
     WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
     // it is a good practice to make sure your code sets wifi mode how you want it.
 
@@ -366,7 +407,7 @@ void reconnect() {
   }
 }
 
-
+float cnt;
 void loop() {
   /*if (!client.connected()) {
     reconnect();
@@ -399,6 +440,9 @@ void loop() {
     serializeJsonPretty(json, str);
     client.publish("Test/temperature", str);
     id++;
-    displayUpTime();
+    //displayUpTime(temp1);
+    char tempReading[6] = {0};
+    dtostrf(id, 4, 2, tempReading);
+    writeDebugMsg(tempReading);
   }
 }
