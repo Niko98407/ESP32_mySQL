@@ -10,6 +10,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
+#include "Libs/StaticDisplay.h"
 
 //define your default values here, if there are different values in config.json, they are overwritten.
 char mysql_server_ip[40] = "192.168.0.30";
@@ -42,27 +43,6 @@ const char* PASS = "56pF5QwjV;6Ak7De";
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
-#define SerialDebugging true
-#define TFT_CS 14       // Chip Select
-#define TFT_RST 26      // Reset
-#define TFT_DC 27      // data/ctrl
-#define TFT_MOSI 25     // Data out
-#define TFT_SCLK 33     // Clock out
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
-
-const uint16_t  Display_Color_Black        = 0x0000;
-const uint16_t  Display_Color_Blue         = 0x001F;
-const uint16_t  Display_Color_Red          = 0xF800;
-const uint16_t  Display_Color_Green        = 0x07E0;
-const uint16_t  Display_Color_Cyan         = 0x07FF;
-const uint16_t  Display_Color_Magenta      = 0xF81F;
-const uint16_t  Display_Color_Yellow       = 0xFFE0;
-const uint16_t  Display_Color_White        = 0xFFFF;
-
-uint16_t        Display_Text_Color         = Display_Color_Black;
-uint16_t        Display_Backround_Color    = Display_Color_White;
-const size_t    MaxString               = 21;
-const size_t    MaxLines                = 10;
 
 
 
@@ -98,118 +78,16 @@ void callback(char* topic, byte* message, unsigned int length) {
     }
   }
 }
-bool            isDisplayVisible        = false;
-char oldTimeString[MaxLines][MaxString]           = { 0 };
-void displayUpTime(float temp) {
 
-    
-    // allocate a buffer
-    char newTimeString[MaxLines][MaxString] = { 0 };
-    char tempReading[6] = {0};
-    dtostrf(temp, 4, 2, tempReading);
-    sprintf(
-        newTimeString[4],
-        "%s",
-        tempReading
-    );
-    sprintf(
-        newTimeString[8],
-        "0123456789-0123456789"
-    );
-    sprintf(
-        newTimeString[7],
-        "0123456789-0123456789"
-    );
-    
-    for(int i = 0; i < MaxLines; i++){
-      if (strcmp(newTimeString[i],oldTimeString[i]) != 0) {
-
-        // yes! home the cursor
-        tft.setCursor(0,8*i);
-
-        // change the text color to the background color
-        tft.setTextColor(Display_Backround_Color);
-
-        // redraw the old value to erase
-        tft.print(oldTimeString[i]);
-
-        // home the cursor
-        tft.setCursor(0,8*i);
-        
-        // change the text color to foreground color
-        tft.setTextColor(Display_Text_Color);
-    
-        // draw the new time value
-        tft.print(newTimeString[i]);
-    
-        // and remember the new value
-        strcpy(oldTimeString[i],newTimeString[i]);
-      }
-    }
-
-}
-uint cursor = 0;
-char oldStrings[MaxLines][MaxString] = { 0 };
-char newStrings[MaxLines][MaxString] = { 0 };
-void writeDebugMsg(char msg[]){
-
-  
-  
-  if(cursor >= MaxLines){//Shift up
-  for(int i = 1; i < MaxLines; i++){
-    strcpy(newStrings[i-1],newStrings[i]);
-  }
-    sprintf(
-        newStrings[MaxLines-1],
-        "%s",
-        msg);
-  }else{
-    sprintf(
-        newStrings[cursor],
-        "%s",
-        msg);
-        cursor++;
-  }
-
-  for(int i = 0; i < MaxLines; i++){
-      if (strcmp(newStrings[i],oldStrings[i]) != 0) {
-
-        // yes! home the cursor
-        tft.setCursor(0,8*i);
-
-        // change the text color to the background color
-        tft.setTextColor(Display_Backround_Color);
-
-        // redraw the old value to erase
-        tft.print(oldStrings[i]);
-
-        // home the cursor
-        tft.setCursor(0,8*i);
-        
-        // change the text color to foreground color
-        tft.setTextColor(Display_Text_Color);
-    
-        // draw the new time value
-        tft.print(newStrings[i]);
-    
-        // and remember the new value
-        strcpy(oldStrings[i],newStrings[i]);
-      }
-    }
-}
+StaticDisplay staticDisplay = StaticDisplay();
 void setup() {
+    
+    staticDisplay.setupDisplay();
+
     Serial.begin(115200);
     Serial.println();
     delay(100);
-    tft.initR(INITR_BLACKTAB); // Init ST7735R chip, green tab
-    tft.setRotation(1);
-    tft.setFont();
-    tft.fillScreen(Display_Backround_Color);
-    tft.setTextColor(Display_Text_Color);
-    tft.setTextSize(1);
-    isDisplayVisible = true;
-    tft.enableDisplay(isDisplayVisible);
-   //tft.print("Booting...");
+    
     WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
     // it is a good practice to make sure your code sets wifi mode how you want it.
 
@@ -221,16 +99,16 @@ void setup() {
     //WiFiManager, Local intialization. Once its business is done, there is no need to keep it around
 
     //read configuration from FS json
-    Serial.println("mounting FS...");
+    staticDisplay.println("mounting FS...");
 
     if (SPIFFS.begin()) {
-      Serial.println("mounted file system");
+      staticDisplay.println("mounted file system");
       if (SPIFFS.exists("/config.json")) {
         //file exists, reading and loading
-        Serial.println("reading config file");
+        staticDisplay.println("reading config file");
         File configFile = SPIFFS.open("/config.json", "r");
         if (configFile) {
-          Serial.println("opened config file");
+          staticDisplay.println("opened config file");
           size_t size = configFile.size();
           // Allocate a buffer to store contents of the file.
           std::unique_ptr<char[]> buf(new char[size]);
@@ -248,7 +126,7 @@ void setup() {
       json.printTo(Serial);
       if (json.success()) {
 #endif
-        Serial.println("\nparsed json");
+        staticDisplay.println("\nparsed json");
         strcpy(mysql_server_ip, json["mysql_server_ip"]);
         strcpy(mysql_server_port, json["mysql_server_port"]);
         strcpy(mysql_server_username, json["mysql_server_username"]);
@@ -260,13 +138,13 @@ void setup() {
         } 
         else 
         {
-          Serial.println("failed to load json config");
+          staticDisplay.println("failed to load json config");
         }
         configFile.close();
         }
       }
     } else {
-      Serial.println("failed to mount FS");
+      staticDisplay.println("failed to mount FS");
     }
   //end read
 
@@ -315,16 +193,16 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
-  if (!wifiManager.autoConnect("ESP32_Config")) {
-    Serial.println("failed to connect and hit timeout");
-    delay(3000);
-    //reset and try again, or maybe put it to deep sleep
-    ESP.restart();
-    delay(5000);
-  }
+  //if (!wifiManager.autoConnect("ESP32_Config")) {
+  //  staticDisplay.println("failed to connect and hit timeout");
+  //  delay(3000);
+  //  //reset and try again, or maybe put it to deep sleep
+  //  ESP.restart();
+  //  delay(5000);
+  //}
 
   //if you get here you have connected to the WiFi
-  Serial.println("connected to Wifi");
+  staticDisplay.println("connected to Wifi");
 
 
 //read updated parameters
@@ -336,19 +214,19 @@ void setup() {
   strcpy(mysql_server_table, custom_mysql_server_table.getValue());
   strcpy(mysql_server_topic, custom_mysql_server_topic.getValue());
   strcpy(mysql_server_identifier, custom_mysql_server_identifier.getValue());
-  Serial.println("The values in the file are: ");
-  Serial.println("\tmysql_server_ip : " + String(mysql_server_ip));
-  Serial.println("\tmysql_server_port : " + String(mysql_server_port));
-  Serial.println("\tmysql_server_username : " + String(mysql_server_username));
-  Serial.println("\tmysql_server_password : " + String(mysql_server_password));
-  Serial.println("\tmysql_server_database : " + String(mysql_server_database));
-  Serial.println("\tmysql_server_table : " + String(mysql_server_table));
-  Serial.println("\tmysql_server_topic : " + String(mysql_server_topic));
-  Serial.println("\tmysql_server_identifier : " + String(mysql_server_identifier));
+  staticDisplay.println("The values in the file are: ");
+  staticDisplay.println("IP: ",String(mysql_server_ip));
+  staticDisplay.println("Port: ",String(mysql_server_port));
+  staticDisplay.println("Username : ",String(mysql_server_username));
+  staticDisplay.println("Password: ",String(mysql_server_password));
+  staticDisplay.println("Database: ",String(mysql_server_database));
+  staticDisplay.println("Table: ",String(mysql_server_table));
+  staticDisplay.println("Topic: ",String(mysql_server_topic));
+  staticDisplay.println("Idenfitier: ",String(mysql_server_identifier));
 
   //save the custom parameters to FS
   if (shouldSaveConfig) {
-    Serial.println("saving config");
+    staticDisplay.println("saving config");
  #if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
     DynamicJsonDocument json(1024);
 #else
@@ -366,7 +244,7 @@ void setup() {
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
-      Serial.println("failed to open config file for writing");
+      staticDisplay.println("failed to open config file for writing");
     }
 
 #if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
@@ -380,8 +258,8 @@ void setup() {
     //end save
   }
 
-  Serial.println("local ip");
-  Serial.println(WiFi.localIP());
+  staticDisplay.println("local ip");
+  staticDisplay.println(WiFi.localIP().toString());
 
   client.setServer(mysql_server_ip, 1883);
   client.setCallback(callback);
@@ -391,14 +269,14 @@ void setup() {
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
+    staticDisplay.println("Attempting MQTT connection...");
     // Attempt to connect
     if (client.connect("ESP8266Client")) {
-      Serial.println("connected");
+      staticDisplay.println("connected");
       // Subscribe
       client.subscribe("esp32/output");
     } else {
-      Serial.print("failed, rc=");
+      Serial.println("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
       // Wait 5 seconds before retrying
@@ -425,8 +303,7 @@ void loop() {
     // Convert the value to a char array
     sensors.requestTemperatures();
     temp1 = sensors.getTempCByIndex(0);
-    Serial.print("Temperature for the device 1 (index 0) is: ");
-    Serial.println(temp1);
+    
     temp2 = 22.4;
     temp3 = -12.22;
     Serial.println("Write");
@@ -440,9 +317,7 @@ void loop() {
     serializeJsonPretty(json, str);
     client.publish("Test/temperature", str);
     id++;
-    //displayUpTime(temp1);
-    char tempReading[6] = {0};
-    dtostrf(id, 4, 2, tempReading);
-    writeDebugMsg(tempReading);
+    
+    staticDisplay.println("Temperatur 1: ", temp1);
   }
 }
