@@ -9,8 +9,8 @@
 #include <DallasTemperature.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
+#include <Adafruit_SSD1306.h>
 #include <SPI.h>
-#include "Libs/StaticDisplay.h"
 
 //define your default values here, if there are different values in config.json, they are overwritten.
 char mysql_server_ip[40] = "192.168.0.30";
@@ -19,7 +19,7 @@ char mysql_server_username[50] = "defaultUser";
 char mysql_server_password[50] = "1";
 char mysql_server_database[50] = "DefaultDB";
 char mysql_server_table[50] = "OutdoorTemps";
-char mysql_server_topic[50] = "home/outdoor/terrace/weather";
+char mysql_server_topic[50] = "home/outdoor/terrace/temps";
 char mysql_server_identifier[50] = "TempReader1";
           
 //flag for saving data
@@ -36,13 +36,21 @@ long lastMsg = 0;
 char msg[50];
 int value;
 
-const char* SSID = "cablelink_0290985";
-const char* PASS = "56pF5QwjV;6Ak7De";
 
-#define ONE_WIRE_BUS 17
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
+const int oneWireBusMain = 17;     
+OneWire oneWireMain(oneWireBusMain);
+DallasTemperature sensorMain(&oneWireMain);
 
+const int oneWireBusAux1 = 15;     
+OneWire oneWireAux1(oneWireBusAux1);
+DallasTemperature sensorAux1(&oneWireAux1);
+
+const int oneWireBusAux2 = 16;     
+OneWire oneWireAux2(oneWireBusAux2);
+DallasTemperature sensorAux2(&oneWireAux2);
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 
 
@@ -79,10 +87,20 @@ void callback(char* topic, byte* message, unsigned int length) {
   }
 }
 
-StaticDisplay staticDisplay = StaticDisplay();
+
 void setup() {
     
-    staticDisplay.setupDisplay();
+    sensorMain.begin();
+  sensorAux1.begin();
+  sensorAux2.begin();
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 10);
+  display.println("Booting...");
+  display.display();
+
 
     Serial.begin(115200);
     Serial.println();
@@ -99,16 +117,16 @@ void setup() {
     //WiFiManager, Local intialization. Once its business is done, there is no need to keep it around
 
     //read configuration from FS json
-    staticDisplay.println("mounting FS...");
+    Serial.println("mounting FS...");
 
     if (SPIFFS.begin()) {
-      staticDisplay.println("mounted file system");
+      Serial.println("mounted file system");
       if (SPIFFS.exists("/config.json")) {
         //file exists, reading and loading
-        staticDisplay.println("reading config file");
+        Serial.println("reading config file");
         File configFile = SPIFFS.open("/config.json", "r");
         if (configFile) {
-          staticDisplay.println("opened config file");
+          Serial.println("opened config file");
           size_t size = configFile.size();
           // Allocate a buffer to store contents of the file.
           std::unique_ptr<char[]> buf(new char[size]);
@@ -126,7 +144,7 @@ void setup() {
       json.printTo(Serial);
       if (json.success()) {
 #endif
-        staticDisplay.println("\nparsed json");
+        Serial.println("\nparsed json");
         strcpy(mysql_server_ip, json["mysql_server_ip"]);
         strcpy(mysql_server_port, json["mysql_server_port"]);
         strcpy(mysql_server_username, json["mysql_server_username"]);
@@ -138,13 +156,13 @@ void setup() {
         } 
         else 
         {
-          staticDisplay.println("failed to load json config");
+          Serial.println("failed to load json config");
         }
         configFile.close();
         }
       }
     } else {
-      staticDisplay.println("failed to mount FS");
+      Serial.println("failed to mount FS");
     }
   //end read
 
@@ -202,7 +220,7 @@ void setup() {
   //}
 
   //if you get here you have connected to the WiFi
-  staticDisplay.println("connected to Wifi");
+  Serial.println("connected to Wifi");
 
 
 //read updated parameters
@@ -214,19 +232,19 @@ void setup() {
   strcpy(mysql_server_table, custom_mysql_server_table.getValue());
   strcpy(mysql_server_topic, custom_mysql_server_topic.getValue());
   strcpy(mysql_server_identifier, custom_mysql_server_identifier.getValue());
-  staticDisplay.println("The values in the file are: ");
-  staticDisplay.println("IP: ",String(mysql_server_ip));
-  staticDisplay.println("Port: ",String(mysql_server_port));
-  staticDisplay.println("Username : ",String(mysql_server_username));
-  staticDisplay.println("Password: ",String(mysql_server_password));
-  staticDisplay.println("Database: ",String(mysql_server_database));
-  staticDisplay.println("Table: ",String(mysql_server_table));
-  staticDisplay.println("Topic: ",String(mysql_server_topic));
-  staticDisplay.println("Idenfitier: ",String(mysql_server_identifier));
+  Serial.println("The values in the file are: ");
+  Serial.println("IP: "+String(mysql_server_ip));
+  Serial.println("Port: "+String(mysql_server_port));
+  Serial.println("Username : "+String(mysql_server_username));
+  Serial.println("Password: "+String(mysql_server_password));
+  Serial.println("Database: "+String(mysql_server_database));
+  Serial.println("Table: "+String(mysql_server_table));
+  Serial.println("Topic: "+String(mysql_server_topic));
+  Serial.println("Idenfitier: "+String(mysql_server_identifier));
 
   //save the custom parameters to FS
   if (shouldSaveConfig) {
-    staticDisplay.println("saving config");
+    Serial.println("saving config");
  #if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
     DynamicJsonDocument json(1024);
 #else
@@ -244,7 +262,7 @@ void setup() {
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
-      staticDisplay.println("failed to open config file for writing");
+      Serial.println("failed to open config file for writing");
     }
 
 #if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
@@ -258,21 +276,20 @@ void setup() {
     //end save
   }
 
-  staticDisplay.println("local ip");
-  staticDisplay.println(WiFi.localIP().toString());
+  Serial.println("local ip");
+  Serial.println(WiFi.localIP().toString());
 
   client.setServer(mysql_server_ip, 1883);
   client.setCallback(callback);
-  sensors.begin();
 }
 
 void reconnect() {
   // Loop until we're reconnected
-  while (!client.connected()) {
-    staticDisplay.println("Attempting MQTT connection...");
+  if(!client.connected()) {
+    Serial.println("Attempting MQTT connection...");
     // Attempt to connect
     if (client.connect("ESP8266Client")) {
-      staticDisplay.println("connected");
+      Serial.println("connected");
       // Subscribe
       client.subscribe("esp32/output");
     } else {
@@ -287,13 +304,13 @@ void reconnect() {
 
 float cnt;
 void loop() {
-  /*if (!client.connected()) {
+  if (!client.connected()) {
     reconnect();
   }
   client.loop();
-  */
+  
   long now = millis();
-  if (now - lastMsg > 1000) {
+  if (now - lastMsg > 5000) {
     lastMsg = now;
 
     // Uncomment the next line to set temperature in Fahrenheit 
@@ -301,23 +318,43 @@ void loop() {
     //temperature = 1.8 * bme.readTemperature() + 32; // Temperature in Fahrenheit
     
     // Convert the value to a char array
-    sensors.requestTemperatures();
-    temp1 = sensors.getTempCByIndex(0);
-    
-    temp2 = 22.4;
-    temp3 = -12.22;
-    Serial.println("Write");
+   sensorMain.requestTemperatures();
+    temp1 = sensorMain.getTempCByIndex(0);
+    sensorAux1.requestTemperatures();
+    temp2 = sensorAux1.getTempCByIndex(0);
+    sensorAux2.requestTemperatures();
+    temp3 = sensorAux2.getTempCByIndex(0);
+    display.clearDisplay();
+    display.setCursor(0, 10);
+    display.print("1: ");
+    display.print(temp1);
+    display.println("'C");
+    display.print("2: ");
+    if(temp2 == -127) display.println("n/A");
+    else{
+     display.print(temp2);
+      display.println("'C");
+   }
+    display.print("3: ");
+    if(temp3 == -127) display.println("n/A");
+    else{
+      display.print(temp3);
+      display.println("'C");
+    }
+
+
     DynamicJsonDocument json(1024);
     json["LogId"] = id;
-    json["LogDescription"] = mysql_server_identifier;
     json["SensorData"]["Sensor1"] = temp1;
     json["SensorData"]["Sensor2"] = temp2;
     json["SensorData"]["Sensor3"] = temp3;
     char str[1024];
     serializeJsonPretty(json, str);
-    client.publish("Test/temperature", str);
+    display.display();
+    client.publish(mysql_server_topic, str);
     id++;
     
-    staticDisplay.println("Temperatur 1: ", temp1);
+    Serial.print("Temperatur 1: ");
+    Serial.println(temp1);
   }
 }
